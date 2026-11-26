@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.dp
 import com.rideassistant.rules.RideLog
 import com.rideassistant.rules.RulesEngine
 import com.rideassistant.ui.BubbleService
+import com.rideassistant.update.AppUpdateInfo
+import com.rideassistant.update.GitHubUpdateChecker
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -61,7 +63,39 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RideAssistantMainUI() {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
+    var updateInfo by remember { mutableStateOf<AppUpdateInfo?>(null) }
+
+    LaunchedEffect(Unit) {
+        val currentVersion = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "1.0.0"
+        } catch (_: Exception) {
+            "1.0.0"
+        }
+        updateInfo = GitHubUpdateChecker.checkForUpdate(currentVersion)
+    }
+
+    updateInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { updateInfo = null },
+            title = { Text("Update Available (v${info.version})", fontWeight = FontWeight.Bold) },
+            text = { Text(info.notes.ifBlank { "A new version is available on GitHub." }) },
+            confirmButton = {
+                Button(onClick = {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)))
+                    updateInfo = null
+                }) {
+                    Text("Update Now")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { updateInfo = null }) {
+                    Text("Later")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
