@@ -2,73 +2,54 @@ package com.rideassistant.capture
 
 import android.accessibilityservice.AccessibilityService
 import android.view.accessibility.AccessibilityEvent
-import android.view.accessibility.AccessibilityNodeInfo
-import com.rideassistant.rules.RideLog
-import com.rideassistant.rules.RulesEngine
+import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
+/**
+ * Event-driven AccessibilityService for detecting ride offers on allowlisted platforms.
+ * Never polls continuously and never retains AccessibilityNodeInfo references.
+ */
+@AndroidEntryPoint
 class RideAccessibilityService : AccessibilityService() {
 
-    private val fareRegex = Regex("""(?:₹|Rs\.?\s*)(\d{2,5})""", RegexOption.IGNORE_CASE)
-    private val kmRegex = Regex("""(\d+(?:\.\d+)?)\s*km""", RegexOption.IGNORE_CASE)
+    @Inject lateinit var adapterRegistry: AppAdapterRegistry
+    @Inject lateinit var appDetector: AppDetector
+    @Inject lateinit var captureManager: CaptureManager
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        RulesEngine.init(applicationContext)
+        captureManager.onServiceConnected()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event == null || !RulesEngine.rules.value.isEnabled) return
+        if (event == null) return
         val pkg = event.packageName?.toString() ?: return
-        if (pkg == packageName) return
+        if (!appDetector.isAllowedPackage(pkg)) return
+
+        val adapter = adapterRegistry.getAdapterForPackage(pkg) ?: return
+        val startNs = System.nanoTime()
 
         val root = rootInActiveWindow ?: return
-        val texts = mutableListOf<String>()
-        collectText(root, texts)
-        val joined = texts.joinToString(" | ")
-
-        val fare = fareRegex.find(joined)?.groupValues?.getOrNull(1)?.toIntOrNull()
-        val km = kmRegex.find(joined)?.groupValues?.getOrNull(1)?.toDoubleOrNull()
-
-        if (fare != null) {
-            val matched = RulesEngine.evaluate(fare, km)
-            var action = if (matched) "Matched" else "Skipped"
-            if (matched && RulesEngine.rules.value.autoAccept) {
-                if (tryClickAccept(root)) {
-                    action = "Auto-Accepted"
-                }
+        try {
+            val offerText = TextTree.extractFromRoot(root, adapter.platformName)
+            if (adapter.isLikelyOfferScreen(offerText)) {
+                val durationMs = (System.nanoTime() - startNs) / 1_000_000L
+                captureManager.onOfferCaptured(offerText, durationMs)
             }
-            RulesEngine.addLog(
-                RideLog(
-                    timestamp = System.currentTimeMillis(),
-                    sourceApp = pkg,
-                    fare = fare,
-                    distanceKm = km,
-                    matched = matched,
-                    actionTaken = action
-                )
-            )
+        } catch (e: Exception) {
+            captureManager.onError(e.message ?: "Accessibility extraction error")
+        } finally {
+            @Suppress("DEPRECATION")
+            root.recycle()
         }
     }
 
-    private fun collectText(node: AccessibilityNodeInfo?, out: MutableList<String>) {
-        if (node == null) return
-        node.text?.toString()?.takeIf { it.isNotBlank() }?.let { out.add(it) }
-        for (i in 0 until node.childCount) {
-            collectText(node.getChild(i), out)
-        }
+    override fun onInterrupt() {
+        captureManager.onServiceDisconnected("Accessibility service interrupted")
     }
 
-    private fun tryClickAccept(node: AccessibilityNodeInfo?): Boolean {
-        if (node == null) return false
-        val txt = node.text?.toString()?.lowercase() ?: ""
-        if (node.isClickable && (txt.contains("accept") || txt.contains("confirm"))) {
-            return node.performAction(AccessibilityNodeInfo.ACTION_CLICK)
-        }
-        for (i in 0 until node.childCount) {
-            if (tryClickAccept(node.getChild(i))) return true
-        }
-        return false
+    override fun onDestroy() {
+        super.onDestroy()
+        captureManager.onServiceDisconnected("Accessibility service destroyed")
     }
-
-    override fun onInterrupt() {}
 }

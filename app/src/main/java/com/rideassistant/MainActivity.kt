@@ -1,134 +1,154 @@
 package com.rideassistant
 
-import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
-import com.rideassistant.rules.RulesEngine
-import com.rideassistant.ui.BubbleService
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.rideassistant.ui.RideAssistantViewModel
+import com.rideassistant.ui.navigation.NavRoutes
+import com.rideassistant.ui.screens.*
+import com.rideassistant.ui.theme.RideAssistantTheme
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        RulesEngine.init(applicationContext)
         setContent {
-            MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    RideAssistantApp()
-                }
+            RideAssistantTheme {
+                RideAssistantRoot()
             }
         }
     }
 }
 
 @Composable
-fun RideAssistantApp() {
-    val context = LocalContext.current
-    val rules by RulesEngine.rules.collectAsState()
-    val logs by RulesEngine.logs.collectAsState()
-    var tab by remember { mutableIntStateOf(0) }
+fun RideAssistantRoot(viewModel: RideAssistantViewModel = hiltViewModel()) {
+    val navController = rememberNavController()
+    val settings by viewModel.settings.collectAsState()
+    val captureState by viewModel.captureState.collectAsState()
+    val latestOffer by viewModel.latestOffer.collectAsState()
+    val rideHistory by viewModel.rideHistory.collectAsState()
+    val homeLocation by viewModel.homeLocation.collectAsState()
+    val analytics by viewModel.analyticsSummary.collectAsState()
+    val diagnostics by viewModel.diagnostics.collectAsState()
 
-    Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        Text("RideAssistant (No Login)", style = MaterialTheme.typography.headlineSmall)
-        Spacer(Modifier.height(12.dp))
+    val startDestination = if (settings.onboardingCompleted) NavRoutes.HOME else NavRoutes.ONBOARDING
+    val backStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = backStackEntry?.destination?.route
 
-        TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("Status") })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Rules") })
-            Tab(selected = tab == 2, onClick = { tab = 2 }, text = { Text("History") })
-        }
+    val bottomTabs = listOf(
+        Triple(NavRoutes.HOME, "Home", Icons.Default.DirectionsCar),
+        Triple(NavRoutes.RULES, "Rules", Icons.Default.Tune),
+        Triple(NavRoutes.HOME_PRIORITY, "My Home", Icons.Default.Home),
+        Triple(NavRoutes.HISTORY, "History", Icons.Default.History),
+        Triple(NavRoutes.ANALYTICS, "Stats", Icons.Default.Analytics)
+    )
 
-        Spacer(Modifier.height(16.dp))
-
-        when (tab) {
-            0 -> {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("Assistant Active", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
-                    Switch(
-                        checked = rules.isEnabled,
-                        onCheckedChange = { RulesEngine.updateRules(context, rules.copy(isEnabled = it)) }
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("1. Enable Accessibility Service") }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                        context.startActivity(intent)
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("2. Grant Overlay Permission") }
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = { context.startForegroundService(Intent(context, BubbleService::class.java)) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("3. Start Floating Bubble") }
-            }
-            1 -> {
-                var minFare by remember(rules.minFare) { mutableStateOf(rules.minFare.toString()) }
-                var maxKm by remember(rules.maxPickupKm) { mutableStateOf(rules.maxPickupKm.toString()) }
-
-                OutlinedTextField(
-                    value = minFare,
-                    onValueChange = { minFare = it },
-                    label = { Text("Minimum Fare (₹)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = maxKm,
-                    onValueChange = { maxKm = it },
-                    label = { Text("Max Distance (km)") },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Auto-Accept Matching Rides", modifier = Modifier.weight(1f))
-                    Switch(
-                        checked = rules.autoAccept,
-                        onCheckedChange = { RulesEngine.updateRules(context, rules.copy(autoAccept = it)) }
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        RulesEngine.updateRules(
-                            context,
-                            rules.copy(
-                                minFare = minFare.toIntOrNull() ?: 50,
-                                maxPickupKm = maxKm.toDoubleOrNull() ?: 3.0
-                            )
+    Scaffold(
+        bottomBar = {
+            if (currentRoute != NavRoutes.ONBOARDING) {
+                NavigationBar {
+                    bottomTabs.forEach { (route, label, icon) ->
+                        NavigationBarItem(
+                            selected = currentRoute == route,
+                            onClick = {
+                                navController.navigate(route) {
+                                    popUpTo(NavRoutes.HOME) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(icon, contentDescription = label) },
+                            label = { Text(label) }
                         )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Save Rules") }
-            }
-            2 -> {
-                LazyColumn {
-                    items(logs) { log ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text("${log.actionTaken} | ₹${log.fare ?: "-"} | ${log.distanceKm ?: "-"} km")
-                                Text(log.sourceApp, style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
                     }
                 }
+            }
+        }
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = startDestination,
+            modifier = Modifier.padding(padding)
+        ) {
+            composable(NavRoutes.ONBOARDING) {
+                OnboardingScreen(
+                    onComplete = {
+                        viewModel.completeOnboarding()
+                        navController.navigate(NavRoutes.HOME) {
+                            popUpTo(NavRoutes.ONBOARDING) { inclusive = true }
+                        }
+                    },
+                    onSaveHomeLocation = { name, lat, lon ->
+                        viewModel.saveHomeLocation(name, lat, lon)
+                    },
+                    onSaveInitialMinFare = { minFare ->
+                        viewModel.saveInitialMinFare(minFare)
+                    }
+                )
+            }
+            composable(NavRoutes.HOME) {
+                HomeScreen(
+                    settings = settings,
+                    captureState = captureState,
+                    latestOffer = latestOffer,
+                    homeLocation = homeLocation,
+                    analytics = analytics,
+                    onToggleMonitoring = viewModel::toggleMonitoring,
+                    onToggleHomePriority = viewModel::toggleHomePriority,
+                    onToggleBubble = viewModel::toggleBubble,
+                    onNavigate = { navController.navigate(it) }
+                )
+            }
+            composable(NavRoutes.RULES) {
+                RulesScreen(
+                    settings = settings,
+                    onSaveRules = viewModel::updateRules
+                )
+            }
+            composable(NavRoutes.HOME_PRIORITY) {
+                HomePriorityScreen(
+                    homePriorityEnabled = settings.homePriorityEnabled,
+                    homeLocation = homeLocation,
+                    onToggleHomePriority = viewModel::toggleHomePriority,
+                    onSaveHome = viewModel::saveHomeLocation
+                )
+            }
+            composable(NavRoutes.HISTORY) {
+                HistoryScreen(
+                    rides = rideHistory,
+                    onDeleteRide = viewModel::deleteRide,
+                    onClearAll = viewModel::clearAllHistory
+                )
+            }
+            composable(NavRoutes.ANALYTICS) {
+                AnalyticsScreen(summary = analytics)
+            }
+            composable(NavRoutes.DIAGNOSTICS) {
+                DiagnosticsScreen(
+                    checks = diagnostics,
+                    onRefresh = viewModel::refreshDiagnostics
+                )
+            }
+            composable(NavRoutes.PRIVACY) {
+                PrivacyScreen(
+                    onClearHistory = viewModel::clearAllHistory,
+                    onClearHome = viewModel::clearHomeLocation
+                )
+            }
+            composable(NavRoutes.GUIDE) {
+                GuideScreen()
             }
         }
     }
