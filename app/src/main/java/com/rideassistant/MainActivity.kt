@@ -99,6 +99,12 @@ fun RideAssistantMainUI() {
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Rounded.Home, contentDescription = null) },
+                    label = { Text("Home") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 3,
+                    onClick = { selectedTab = 3 },
                     icon = { Icon(Icons.Rounded.History, contentDescription = null) },
                     label = { Text("History") }
                 )
@@ -109,7 +115,8 @@ fun RideAssistantMainUI() {
             when (selectedTab) {
                 0 -> StatusScreen()
                 1 -> RulesScreen()
-                2 -> HistoryScreen()
+                2 -> HomeTabScreen()
+                3 -> HistoryScreen()
             }
         }
     }
@@ -337,6 +344,100 @@ fun HistoryCard(log: RideLog) {
                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                 )
             }
+        }
+    }
+}
+
+@Composable
+fun HomeTabScreen() {
+    val context = LocalContext.current
+    val rules by RulesEngine.rules.collectAsState()
+    var name by remember(rules.homeName) { mutableStateOf(rules.homeName) }
+    var lat by remember(rules.homeLat) { mutableStateOf(rules.homeLat) }
+    var lon by remember(rules.homeLon) { mutableStateOf(rules.homeLon) }
+    var radius by remember(rules.homeRadiusKm) { mutableStateOf(rules.homeRadiusKm.toString()) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.Home, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text("Home Priority Mode", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Prioritize rides going toward your home",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(
+                    checked = rules.homePriorityEnabled,
+                    onCheckedChange = { RulesEngine.updateRules(context, rules.copy(homePriorityEnabled = it)) }
+                )
+            }
+        }
+
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Home Label") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = lat,
+                    onValueChange = { lat = it },
+                    label = { Text("Latitude (e.g. 28.6139)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = lon,
+                    onValueChange = { lon = it },
+                    label = { Text("Longitude (e.g. 77.2090)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = radius,
+                    onValueChange = { radius = it },
+                    label = { Text("Home Radius (km)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+
+        Button(
+            onClick = {
+                RulesEngine.updateRules(
+                    context,
+                    rules.copy(
+                        homeName = name.ifBlank { "My Home" },
+                        homeLat = lat.trim(),
+                        homeLon = lon.trim(),
+                        homeRadiusKm = radius.toDoubleOrNull() ?: 5.0
+                    )
+                )
+                Toast.makeText(context, "Home location saved!", Toast.LENGTH_SHORT).show()
+            },
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp)
+        ) {
+            Text("Save Home Location", fontWeight = FontWeight.Bold)
         }
     }
 }

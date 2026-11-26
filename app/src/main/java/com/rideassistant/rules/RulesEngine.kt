@@ -10,7 +10,12 @@ data class AssistantRules(
     val autoAccept: Boolean = false,
     val minFare: Int = 50,
     val maxPickupKm: Double = 3.0,
-    val minPerKmRate: Double = 10.0
+    val minPerKmRate: Double = 10.0,
+    val homePriorityEnabled: Boolean = false,
+    val homeName: String = "My Home",
+    val homeLat: String = "",
+    val homeLon: String = "",
+    val homeRadiusKm: Double = 5.0
 )
 
 data class RideLog(
@@ -37,7 +42,12 @@ object RulesEngine {
             autoAccept = sp.getBoolean("auto_accept", false),
             minFare = sp.getInt("min_fare", 50),
             maxPickupKm = sp.getFloat("max_pickup_km", 3.0f).toDouble(),
-            minPerKmRate = sp.getFloat("min_per_km", 10.0f).toDouble()
+            minPerKmRate = sp.getFloat("min_per_km", 10.0f).toDouble(),
+            homePriorityEnabled = sp.getBoolean("home_priority_enabled", false),
+            homeName = sp.getString("home_name", "My Home") ?: "My Home",
+            homeLat = sp.getString("home_lat", "") ?: "",
+            homeLon = sp.getString("home_lon", "") ?: "",
+            homeRadiusKm = sp.getFloat("home_radius_km", 5.0f).toDouble()
         )
     }
 
@@ -49,6 +59,11 @@ object RulesEngine {
             .putInt("min_fare", updated.minFare)
             .putFloat("max_pickup_km", updated.maxPickupKm.toFloat())
             .putFloat("min_per_km", updated.minPerKmRate.toFloat())
+            .putBoolean("home_priority_enabled", updated.homePriorityEnabled)
+            .putString("home_name", updated.homeName)
+            .putString("home_lat", updated.homeLat)
+            .putString("home_lon", updated.homeLon)
+            .putFloat("home_radius_km", updated.homeRadiusKm.toFloat())
             .apply()
     }
 
