@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    RideAssistantApp()
+                    RideAssistantMainUI()
                 }
             }
         }
@@ -60,7 +60,7 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RideAssistantApp() {
+fun RideAssistantMainUI() {
     var selectedTab by remember { mutableIntStateOf(0) }
 
     Scaffold(

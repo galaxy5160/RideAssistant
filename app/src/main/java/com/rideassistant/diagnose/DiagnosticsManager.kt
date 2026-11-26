@@ -1,7 +1,7 @@
 package com.rideassistant.diagnose
 
 import android.Manifest
-import android.accessibilityservice.AccessibilityManager
+import android.view.accessibility.AccessibilityManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
